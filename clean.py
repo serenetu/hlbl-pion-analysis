@@ -34,6 +34,12 @@ def get_f_out_name(line):
     return res
 
 
+def remove_0_label(line):
+    line_fix = line.replace('[0] ', '')
+    line_fix = line_fix.strip()
+    return line_fix
+
+
 def clean(f_name, out_path):
     f = open(f_name, 'r')
     if_write = False
@@ -64,22 +70,23 @@ def clean(f_name, out_path):
     return
 
 
-def clean_onepair(f_name, out_path, out_label):
+def clean_onepair(f_name, anchor, out_path, out_label):
     f = open(f_name, 'r')
     if_write = False
     num = 0
     for line in f:
         nums_out_files = 0
         nums_out_lines = 0
+        line_fix = remove_0_label(line)
 
-        if 'Complex_Table' in line:
+        if anchor in line_fix:
             num += 1
             if_write = True
             f_out = open(out_path + '/' + out_label + str(num).zfill(5), 'w')
             continue
 
         if if_write == True:
-            vals = get_vals_in_line(line)
+            vals = get_vals_in_line(line_fix)
             if vals == False:
                 nums_out_lines = 0
                 f_out.close()
@@ -94,7 +101,9 @@ def clean_onepair(f_name, out_path, out_label):
 
 
 if __name__ == '__main__':
-    f_name = './test/2019.01.28-17:04:42-41854'
+    f_name = './test/2019.01.31-11:08:34-29342'
+    anchor = 'show one pair e_xbbm_table with prop and dist'
     out_path = './test/'
-    out_label = 'pgge_rotate_from_y_and_rotation_angles_distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:4096.'
-    clean_onepair(f_name, out_path, out_label)
+    # out_label = 'pgge_rotate_from_y_and_rotation_angles_distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:4096.'
+    out_label = 'pgge_model_tsep=40.'
+    clean_onepair(f_name, anchor, out_path, out_label)
