@@ -241,18 +241,25 @@ class DoLatticeAnalysis(object):
         print self.traj_pair_list
         return
 
-    def make_traj_pair_list(self):
+    def make_traj_pair_list(self, traj_start, traj_end, traj_jump, traj_sep):
         res = []
-        for i in range(len(self.traj_list) / 2):
-            ii = len(self.traj_list) / 2 + i
-            res.append((self.traj_list[i], self.traj_list[ii]))
+        traj_batch = traj_start
+        while traj_batch < traj_end:
+            for traj in range(traj_batch, traj_batch + traj_jump, traj_sep):
+                if traj + traj_jump > traj_end:
+                    break
+                res.append((traj, traj + traj_jump))
+            traj_batch += traj_jump * 2
         return res
 
-    def one_config_f2_valid(self, pair, num):
+    def get_traj_pair_folder_name(self, traj_pair):
         if self.ama is True:
-            pair_path = self.ensemble_path + "/traj=" + str(pair[0]).zfill(4) + "," + str(pair[1]).zfill(4) + ";ama;t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0"
+            return "traj=" + str(traj_pair[0]).zfill(4) + "," + str(traj_pair[1]).zfill(4) + ";accuracy=ama;t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0"
         else:
-            pair_path = self.ensemble_path + "/traj=" + str(pair[0]).zfill(4) + "," + str(pair[1]).zfill(4) + ";t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0;accuracy=0"
+            return "traj=" + str(traj_pair[0]).zfill(4) + "," + str(traj_pair[1]).zfill(4) + ";accuracy=sloppy;t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0"
+
+    def one_config_f2_valid(self, pair, num):
+        pair_path = self.ensemble_path + '/' + self.get_traj_pair_folder_name(pair)
         if not os.path.exists(pair_path):
             return False
         files = os.listdir(pair_path)
@@ -267,10 +274,7 @@ class DoLatticeAnalysis(object):
 
     def get_one_config_f2(self, pair, intg='infto0', par_start=0, par_end=50):
         print 'Get One Config f2:'
-        if self.ama is True:
-            pair_path = self.ensemble_path + "/traj=" + str(pair[0]).zfill(4) + "," + str(pair[1]).zfill(4) + ";ama;t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0"
-        else:
-            pair_path = self.ensemble_path + "/traj=" + str(pair[0]).zfill(4) + "," + str(pair[1]).zfill(4) + ";t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0;accuracy=0"
+        pair_path = self.ensemble_path + '/' + self.get_traj_pair_folder_name(pair)
         print pair_path
         table_all_ = read_all_bi_table(pair_path, num_row=self.num_row, num_col=self.num_col)
 
@@ -392,40 +396,31 @@ class Do24DLatticeAnalysis(DoLatticeAnalysis):
 
 class Do32DLatticeAnalysis(DoLatticeAnalysis):
 
-    def __init__(self, ama=True, mod="", t_min=10, xxp_limit=10, m_pi=0.139474, zw=3.24457020e+08, zv=0.73464):
+    def __init__(self, ama, mod, xxp_limit):
+        # basic info
         self.ensemble = "32D-0.00107"
-        self.ensemble_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/" + self.ensemble
         self.l = 32
-        self.ama = ama
-        self.mod = mod
-        self.t_min = t_min
-        self.xxp_limit = xxp_limit
-        self.m_pi = m_pi
-        self.zw = zw
-        self.zv = zv
-        if self.ama is True:
-            self.f2_jk_dict_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/" + self.ensemble + ";ama;t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0"
-        else:
-            self.f2_jk_dict_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/" + self.ensemble + ";t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0;accuracy=0"
-        self.traj_list = range(680, 1371, 10)
-        self.traj_list = range(680, 1371, 10)
-        self.traj_pair_list = self.make_traj_pair_list()
+        self.m_pi = 0.139474
+        self.zw = 3.24457020e+08
+        self.zv = 0.73464
+        self.t_min = 10
         self.num_row = 80
         self.num_col = 40
+
+        # input
+        self.ama = ama
+        self.mod = mod
+        self.xxp_limit = xxp_limit
+
+        # setup
+        f2_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2"
+        self.ensemble_path = f2_path + '/' + self.ensemble
+        f2_jk_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/"
+        # self.f2_jk_dict_path = f2_jk_path + '/' + self.get_traj_pair_folder_name()
+        self.traj_pair_list = self.make_traj_pair_list(680, 1370, 50, 10)
         print "Traj Pair List"
         print self.traj_pair_list
         return
-
-
-def do_lattice_analysis(ensemble="24D", mod="", t_min=10, xxp_limit=10, l=24, zw=1.28*10.**8., zv=0.73457):
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/" + ensemble + "/traj=1010,1660;t-min=0010;xxp-limit=10;mod=" + mod + ";type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(l=l, zw=zw, zv=zv)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-    plt.show()
 
 
 if __name__ == '__main__':
@@ -435,460 +430,18 @@ if __name__ == '__main__':
     R_RANGE = range(20, 21)
     plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0', label='pion pole model')
 
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=16)
+    ana_24 = Do24DLatticeAnalysis(mod='', ama=True, xxp_limit=12)
+    ana_24.get_all_config_f2(1024)
+    # ana_32.plt_all_config_f2(color='b', rows=range(15, 20))
+    ana_24.get_f2_jk_dict()
+    ana_24.plt_f2_jk(rows=range(10, 20), color='g', label='24D ama xxp_limit=10 jk (' + str(ana_24.num_configs) + ')')
+
+    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=12)
     ana_32.get_all_config_f2(1024)
     # ana_32.plt_all_config_f2(color='b', rows=range(15, 20))
     ana_32.get_f2_jk_dict()
-    ana_32.plt_f2_jk(rows=range(10, 20), color='g', label='32D ama xxp_limit=16 jk (' + str(ana_32.num_configs) + ')')
+    ana_32.plt_f2_jk(rows=range(10, 20), color='g', label='32D ama xxp_limit=10 jk (' + str(ana_32.num_configs) + ')')
 
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=14)
-    ana_32.get_all_config_f2(1024)
-    # ana_32.plt_all_config_f2(color='b', rows=range(15, 20))
-    ana_32.get_f2_jk_dict()
-    ana_32.plt_f2_jk(rows=range(10, 20), color='b', label='32D ama xxp_limit=14 jk (' + str(ana_32.num_configs) + ')')
-
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=10)
-    ana_32.get_all_config_f2(1024)
-    # ana_32.plt_all_config_f2(color='b', rows=range(15, 20))
-    ana_32.get_f2_jk_dict()
-    ana_32.plt_f2_jk(rows=range(10, 20), color='r', label='32D ama xxp_limit=10 jk (' + str(ana_32.num_configs) + ')')
-
-    #plt.text(6, 4, 'preliminary', ha='left', wrap=True)
-    plt.legend(loc='upper right')
-    plt.xlabel('The longest distance between x, y, y\'')
-    plt.ylabel('g-2 (partial sum from inf to 0)')
     plt.show()
-    exit()
-
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=False)
-    ana_32.get_all_config_f2(1024)
-    # ana_32.plt_all_config_f2(color='b', rows=range(10,11))
-    ana_32.get_f2_jk_dict()
-    ana_32.plt_f2_jk(rows=range(10, 11), color='b', label='32D sloppy jk (' + str(ana_32.num_configs) + ')')
-
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=True)
-    ana_32.get_all_config_f2(1024)
-    # ana_32.plt_all_config_f2(color='b', rows=range(10,11))
-    ana_32.get_f2_jk_dict()
-    ana_32.plt_f2_jk(rows=range(10, 11), color='r', label='32D ama jk (' + str(ana_32.num_configs) + ')')
 
     exit()
-
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=False)
-    ana_32.get_all_config_f2()
-    ana_32.plt_all_config_f2(color='g', label='32D sloppy')
-
-    ana_24 = Do24DLatticeAnalysis(mod='', ama=False)
-    ana_24.get_all_config_f2()
-    ana_24.plt_all_config_f2(color='r', label='24D sloppy')
-
-
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=False)
-    ana_32.get_all_config_f2()
-    ana_32.plt_all_config_f2(color='g', label='32D sloppy')
-
-    ana_24 = Do24DLatticeAnalysis(mod='', ama=False)
-    ana_24.get_all_config_f2()
-    ana_24.plt_all_config_f2(color='r', label='24D sloppy')
-
-    plt.legend(loc='upper right')
-
-    ana_24.read_f2_jk_dict()
-    ana_24.plt_f2_jk(color='b')
-
-
-
-    ana_24 = Do24DLatticeAnalysis(mod='')
-    ana_24.read_f2_jk_dict()
-    ana_24.plt_f2_jk(color='r')
-
-    ana_24 = Do24DLatticeAnalysis(mod='xyp>=xy')
-    ana_24.read_f2_jk_dict()
-    ana_24.plt_f2_jk(color='b')
-
-    ana_24 = Do24DLatticeAnalysis(mod='xy>=xyp')
-    ana_24.read_f2_jk_dict()
-    ana_24.plt_f2_jk(color='g')
-
-    plt.show()
-    exit()
-
-    # plot model tsep 2000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=2000;xxp-limit=10;mod=", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='black')
-
-    # plot model tsep 2000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=2000;xxp-limit=10;mod=xyp>=xy", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='black')
-
-    # plot model tsep 2000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=2000;xxp-limit=10;mod=xy>=xyp", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='black')
-    plt.show()
-    exit()
-
-
-    PATH = '/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/test/'
-    ZV = 0.73457
-
-    do_lattice_analysis(ensemble="24D", mod="", t_min=10, xxp_limit=10, l=24, zw=1.28*10.**8., zv=0.73457)
-    exit()
-
-    # plot luchang table
-    LUCHANG_PATH = PATH + '/' + 'tab.txt'
-    UNIT = 0.1
-    R_RANGE = range(20, 30)
-    plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/24D/traj=1030,1030;t-min=0010;xxp-limit=10;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=10, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/24D/traj=1030,1030;t-min=0010;xxp-limit=10;mod=xy>=xyp;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=10, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/24D/traj=1030,1030;t-min=0010;xxp-limit=10;mod=xyp>=xy;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=10, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-    plt.show()
-
-    # plot luchang table
-    LUCHANG_PATH = PATH + '/' + 'tab.txt'
-    UNIT = 0.1
-    R_RANGE = range(20, 30)
-    plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0')
-
-    # plot model tsep 2000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=2000;xxp-limit=10;mod=", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='black')
-
-    # plot model tsep 2000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=2000;xxp-limit=10;mod=xyp>=xy", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 15)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='black')
-    plt.show()
-    exit()
-
-
-
-
-
-
-    # plot model tsep 2000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=2000;xxp-limit=25", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(10, 6)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='g')
-
-    # plot model tsep 1000
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=1000;xxp-limit=10", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=2000)
-    NUM_PAIRS = all_table.shape[0]
-    UNIT = 0.2
-    R_RANGE = range(5, 6)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-
-    plt.show()
-    exit()
-
-    # plot model tsep 100
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=0100;xxp-limit=25", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=100)
-    NUM_PAIRS = 360
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-
-    # plot model tsep 40
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/model/pion=0.139750;t-sep=0040;xxp-limit=25", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_model_factor(t=40)
-    NUM_PAIRS = 182
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='b')
-
-    # plot model tsep40
-    MODEL_LABEL = 'pgge_model_tsep=40.'
-    F_PATH_LABEL = PATH + '/' + MODEL_LABEL
-    FACTOR = 10. ** 10. * set_model_factor(t=40)
-    NUM_PAIRS = 296
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2(F_PATH_LABEL, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='g')
-    plt.show()
-
-    # plot luchang table
-    LUCHANG_PATH = PATH + '/' + 'tab.txt'
-    UNIT = 0.1
-    R_RANGE = range(20, 30)
-    plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/32D-0.00107/traj=1050,1050;t-sep=0020;xxp-limit=20;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=20, l=32, zw=3.24457020e+08, zv=0.72)
-    NUM_PAIRS = 900
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='b')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/32D-0.00107/traj=1050,1050;t-sep=0020;xxp-limit=15;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=20, l=32, zw=3.24457020e+08, zv=0.72)
-    NUM_PAIRS = 900
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='g')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/24D/traj=1030,1030;t-sep=0020;xxp-limit=12;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=20, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    NUM_PAIRS = 700
-    UNIT = 0.2
-    R_RANGE = range(10, 20)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-
-    all_table = read_all_bi_table("/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/24D/traj=1030,1030;t-sep=0020;xxp-limit=10;type=0;accuracy=0", num_row=80, num_col=40)
-    print all_table.shape
-    FACTOR = 10. ** 10. * set_factor(t=20, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    NUM_PAIRS = 715
-    UNIT = 0.2
-    R_RANGE = range(10, 20)
-    plot_f2_(all_table, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='black')
-    plt.show()
-    exit()
-
-    # plot model
-    MODEL_LABEL = 'pgge_model_rotate_from_y_and_rotation_angles_distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:4096.'
-    F_PATH_LABEL = PATH + '/' + MODEL_LABEL
-    FACTOR = 10. ** 10. * set_model_factor(t=30)
-    NUM_PAIRS = 374
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2(F_PATH_LABEL, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='r')
-
-    # plot model tsep40
-    MODEL_LABEL = 'pgge_model_tsep=40.'
-    F_PATH_LABEL = PATH + '/' + MODEL_LABEL
-    FACTOR = 10. ** 10. * set_model_factor(t=40)
-    NUM_PAIRS = 296
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2(F_PATH_LABEL, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='g')
-
-    # plot lattice
-    LATTICE_LABEL = 'pgge_lattice_tsep=20.'
-    F_PATH_LABEL = PATH + '/' + LATTICE_LABEL
-    FACTOR = 10. ** 10. * set_factor(t=20, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    NUM_PAIRS = 856
-    UNIT = 0.2
-    R_RANGE = range(10, 20)
-    plot_f2(F_PATH_LABEL, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='b')
-    plt.show()
-    exit(0)
-
-    '''
-    #FILE_LABEL = '512_rotation_model.'
-    # plot old model
-    MODEL_LABEL = '512_rotation_model.'
-    F_PATH_LABEL = PATH + '/' + MODEL_LABEL
-    FACTOR = 10 ** 10. * set_model_factor(t=30) * pion_prop(t=30) ** 2.
-    NUM_PAIRS = 280
-    UNIT = 0.2
-    R_RANGE = range(10, 30)
-    plot_f2(F_PATH_LABEL, NUM_PAIRS, UNIT, R_RANGE, factor=FACTOR, intg='infto0', color='y')
-
-    #FILE_LABEL = 'distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:512,r_pion_to_gamma:30.'
-    #FILE_LABEL = 'y_and_rotation_angles_distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:512.'
-    #FILE_LABEL = 'distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:1024,r_pion_to_gamma:30.'
-    #FILE_LABEL = 'y_and_rotation_angles_distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:512_norotate.'
-    #FILE_LABEL = 'pgge_rotate_from_y_and_rotation_angles_distr:m=0,a=2,r_left=5,r_mid=40,r_right=60,npairs:4096.'
-    table_all = []
-    for i in range(1, 66):
-        if i in []:
-            continue
-        f_name = PATH + '/' + FILE_LABEL + str(i).zfill(5)
-        one_table = read_table(f_name)
-        one_table = one_table.transpose()
-        one_table = partial_sum(one_table)
-        # print(one_table.shape)
-        table_all.append(one_table)
-    table_all = np.array(table_all)
-    print(table_all.shape)
-    factor = set_factor(t=20, l=24, zw=1.28*10.**8., zv=0.72) #* 0.0534983
-    factor = set_model_factor(t=30)
-    print('factor: ', factor)
-    table_avg = 10**10 * factor * np.average(table_all, axis=0)
-    table_std = 10**10 * factor * np.std(table_all, axis=0) * len(table_all) ** (-1./2.)
-    print(table_avg.shape, table_std.shape)
-    #plt_table(table_avg, table_std, ylim=(0, 15), xlim=(0, 15), unit=0.2, rows=range(10, 20))
-    #plt_table(table_avg[:, ::-1], table_std[:, ::-1], unit=0.2, rows=range(1, 20))
-    plt_table(table_avg, table_std, unit=0.2, rows=range(10, 20))
-    plt.show()
-    '''
-
-
-    '''
-    # partial sum from 0 max_R to inf
-    PATH= '/Users/tucheng/Desktop/Physics/research/light-by-light/res/test/'
-    FILE_LABEL = '512.'
-
-    luchang_table = read_table_noimag(PATH + '/' + 'tab.txt')
-    plt_table(luchang_table, unit=0.1, rows=range(20, 30))
-
-    table_all = []
-    for i in range(1, 290):
-        if i in []:
-            continue
-        f_name = PATH + '/' + FILE_LABEL + str(i).zfill(5)
-        one_table = read_table(f_name)
-        one_table = partial_sum(one_table.transpose())
-        print(one_table.shape)
-        table_all.append(one_table)
-    table_all = np.array(table_all)
-    print(table_all.shape)
-    print('factor: ', set_factor(Z_pi = 1, Z_v = 1.))
-    table_avg = 10**10 * set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.) * np.average(table_all, axis=0)
-    table_std = 10**10 * set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.) * np.std(table_all, axis=0) * len(table_all) ** (-1./2.)
-    print(table_avg.shape, table_std.shape)
-    plt_table(table_avg, table_std, ylim=(0, 15), xlim=(0, 15), unit=0.2, rows=range(10, 20))
-    plt.show()
-    '''
-
-    '''
-    # partial sum from 0 max_R to inf
-    PATH= '/Users/tucheng/Desktop/Physics/research/light-by-light/res/test/'
-    FILE_LABEL = '512_model.'
-
-    luchang_table = read_table_noimag(PATH + '/' + 'tab.txt')
-    luchang_table = de_partial_sum(luchang_table)
-    luchang_table = luchang_table[:, ::-1]
-    luchang_table = partial_sum(luchang_table)
-    plt_table(luchang_table[:, ::-1], unit=0.1, rows=range(20, 40))
-
-    table_all = []
-    for i in range(1, 290):
-        if i in []:
-            continue
-        f_name = PATH + '/' + FILE_LABEL + str(i).zfill(5)
-        one_table = read_table(f_name)
-        one_table = partial_sum(one_table.transpose()[:, ::-1])
-        print(one_table.shape)
-        table_all.append(one_table)
-    table_all = np.array(table_all)
-    print(table_all.shape)
-    print('factor: ', set_factor(Z_pi = 1, Z_v = 1.))
-    table_avg = 10**10 * set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.) * np.average(table_all, axis=0)
-    table_std = 10**10 * set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.) * np.std(table_all, axis=0) * len(table_all) ** (-1./2.)
-    print(table_avg.shape, table_std.shape)
-    #plt_table(table_avg[:, ::-1], table_std[:, ::-1], ylim=(0, 15), xlim=(0,15), unit=0.2, rows=range(15, 20))
-    plt_table(table_avg[:, ::-1], table_std[:, ::-1], unit=0.2, rows=range(15, 20))
-    plt.show()
-    '''
-
-
-    '''
-    # partial sum from inf max_R to 0
-    PATH= '/Users/tucheng/Desktop/Physics/research/light-by-light/res/test/'
-    FILE_LABEL = '1024_rerun_parsum.'
-
-    luchang_table = read_table_noimag(PATH + '/' + 'tab.txt')
-    luchang_table = de_partial_sum(luchang_table)
-    luchang_table = luchang_table[:, ::-1]
-    luchang_table = partial_sum(luchang_table)
-    plt_table(luchang_table[:, ::-1], unit=0.1, rows=range(20, 40))
-
-    table_all = []
-    for i in range(1, 26):
-        if i in []:
-            continue
-        f_name = PATH + '/' + FILE_LABEL + str(i).zfill(5)
-        one_table = read_table(f_name)
-        one_table = one_table.transpose()
-        #one_table = de_partial_sum(one_table)
-        #one_table = partial_sum(one_table[:, ::-1])
-        #one_table = partial_sum(one_table)
-        print(one_table.shape)
-        table_all.append(one_table)
-    table_all = np.array(table_all)
-    print(table_all.shape)
-    print('factor: ', set_factor(Z_pi = 1, Z_v = 1.))
-    table_avg = 10**10 * set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.) * np.average(table_all, axis=0)
-    table_std = 10**10 * set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.) * np.std(table_all, axis=0) * len(table_all) ** (-1./2.)
-    print(table_avg.shape, table_std.shape)
-    #plt_table(table_avg[:, ::-1], table_std[:, ::-1], ylim=(0, 10), xlim=(0,15), unit=0.2, rows=range(10, 21))
-    plt_table(table_avg, table_std, unit=0.2, rows=range(10, 20))
-    plt.show()
-    '''
-
-    '''
-    # partial sum from inf max_R to 0
-    PATH= '/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/test/'
-    FILE_LABEL = '512_model.'
-    FILE_LABEL = '512_xbl_bmm.'
-    FILE_LABEL = '512_xbm_bml.'
-    #FILE_LABEL = '512_rotation_model.'
-
-    luchang_table = read_table_noimag(PATH + '/' + 'tab.txt')
-    plt_table(luchang_table, unit=0.1, rows=range(20, 40))
-
-    table_all = []
-    for i in range(1, 500):
-        if i in []:
-            continue
-        f_name = PATH + '/' + FILE_LABEL + str(i).zfill(5)
-        one_table = read_table(f_name)
-        one_table = partial_sum(one_table.transpose())
-        print(one_table.shape)
-        table_all.append(one_table)
-    table_all = np.array(table_all)
-    print(table_all.shape)
-    factor = set_factor(mu_mass=0.1056583745/1.015, Z_pi = 1, Z_v = 1.)
-    table_avg = 10**10 * factor * np.average(table_all, axis=0)
-    table_std = 10**10 * factor * np.std(table_all, axis=0) * len(table_all) ** (-1./2.)
-    print(table_avg.shape, table_std.shape)
-    plt_table(table_avg, table_std, unit=0.2, rows=range(10, 20))
-    plt.show()
-    '''
