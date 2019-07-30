@@ -1,11 +1,9 @@
 import sys
-sys.path.append('/Users/tucheng/Desktop/Physics/research/qcdlib-python/qcdlib')
 import numpy as np
 from scipy.special import kn
 import matplotlib.pyplot as plt
 import os
 import jackknife as jk
-import json
 
 
 def read_table(fname):
@@ -146,7 +144,7 @@ def compute_zp(l, m_pi):
     return 1. / (2. * m_pi * l ** 3.)
 
 
-def set_factor(l, m_pi, zw, zv, mu_mass=0.1056583745 / 1.015, e=0.30282212, three=3):
+def set_factor(l, m_pi, zw, zv, mu_mass, e=0.30282212, three=3):
     q_u = 2./3.
     q_d = -1./3.
     zp = compute_zp(l, m_pi)
@@ -158,10 +156,12 @@ def pion_prop(t, m):
     return m * kn(1, t * m) / (4. * np.pi ** 2. * t)
 
 
+'''
 def set_model_factor(t, m_pi, mu_mass=0.1056583745 / 1.015, e=0.30282212, three=3):
     prop = pion_prop(t, m_pi)
     fac = 2. * mu_mass * e ** 6. * three / 2. / 3. / prop ** 2.
     return fac
+'''
 
 
 def plot_f2(f_path_label, num_pairs, unit, r_range, factor=1.0, intg='0toinf', color=''):
@@ -208,15 +208,17 @@ def plot_f2_(table_all_, num_pairs, unit, r_range, factor=1.0, intg='0toinf', co
     return
 
 
-def plot_luchang_table(f_path, unit, r_range, intg='0toinf', label=''):
+def plot_luchang_table(f_path, unit, r_range, intg='0toinf', label='', color='r'):
     luchang_table = read_table_noimag(f_path)
+    print(luchang_table)
     if intg == '0toinf':
-        plt_table(luchang_table, unit=unit, rows=r_range, label=label)
+        plt_table(luchang_table, unit=unit, rows=r_range, label=label, color=color)
     elif intg == 'infto0':
         luchang_table = de_partial_sum(luchang_table)
         luchang_table = luchang_table[:, ::-1]
         luchang_table = partial_sum(luchang_table)
-        plt_table(luchang_table[:, ::-1], unit=unit, rows=r_range, label=label)
+        plt_table(luchang_table[:, ::-1], unit=unit, rows=r_range, label=label, color=color)
+    return
 
 
 class DoLatticeAnalysis(object):
@@ -292,7 +294,7 @@ class DoLatticeAnalysis(object):
             table_all.append(one_table)
         table_all = np.array(table_all).real
         print('(num_pairs, r, R): ' + str(table_all.shape))
-        factor = 10. ** 10. * set_factor(l=self.l, m_pi=self.m_pi, zw=self.zw, zv=self.zv)
+        factor = 10. ** 10. * set_factor(l=self.l, m_pi=self.m_pi, zw=self.zw, zv=self.zv, mu_mass=self.muon)
         table_avg = np.average(factor * table_all, axis=0)
         table_std = np.std(factor * table_all, axis=0) * len(table_all) ** (-1./2.)
         # plt_table(table_avg, table_std, unit=0.2, rows=range(15), color='r')
@@ -326,8 +328,19 @@ class DoLatticeAnalysis(object):
         except AttributeError:
             print 'Run get_all_config_f2 First'
             exit()
-        self.f2_jk_dict = jk.make_jackknife_dic(self.f2_config_dict)
-        self.f2_jk_mean, self.f2_jk_err = jk.jackknife_avg_err_dic(self.f2_jk_dict)
+        self.f2_jk_dict = jk.make_jackknife_dict(self.f2_config_dict)
+        return
+
+    def get_f2_jk_mean_err(self):
+        self.f2_jk_mean, self.f2_jk_err = jk.jackknife_avg_err_dict(self.f2_jk_dict)
+        return
+
+    def save_f2_jk_mean_err(self, path):
+        print('f2 jk mean err:')
+        print(self.f2_jk_mean)
+        print(self.f2_jk_err)
+        np.savetxt(path + '/' + self.label + '.mean', self.f2_jk_mean)
+        np.savetxt(path + '/' + self.label + '.err', self.f2_jk_err)
         return
 
     def save_f2_jk_dict(self, path=None):
@@ -357,40 +370,58 @@ class DoLatticeAnalysis(object):
                 self.f2_jk_dict[key] = np.load(save_path + '/' + f)
         return
 
-    def plt_f2_jk(self, unit=0.2, rows=range(10, 11), color='r', label=''):
-        self.f2_jk_mean, self.f2_jk_err = jk.jackknife_avg_err_dic(self.f2_jk_dict)
-        plt_table(self.f2_jk_mean, self.f2_jk_err, unit=unit, rows=rows, color=color, label=label)
+    def plt_f2_jk(self, unit=0.2, rows=range(10, 11), color='r'):
+        # self.f2_jk_mean, self.f2_jk_err = jk.jackknife_avg_err_dict(self.f2_jk_dict)
+        plt_table(self.f2_jk_mean, self.f2_jk_err, unit=unit, rows=rows, color=color, label=self.label)
+        return
+
+    def get_label(self):
+        if self.ama:
+            ama_label = 'ama'
+        else:
+            ama_label = 'sloppy'
+        res = '{};{};xxp_limit={};mod={};jk({})'.format(
+            self.ensemble,
+            ama_label,
+            self.xxp_limit,
+            self.mod,
+            self.num_configs
+        )
+        self.label = res
+        return self.label
+
+    def read_f2_jk_mean_err(self, mean_path, err_path, label):
+        self.label = label
+        self.f2_jk_mean = np.loadtxt(mean_path)
+        self.f2_jk_err = np.loadtxt(err_path)
         return
 
 
 class Do24DLatticeAnalysis(DoLatticeAnalysis):
 
-    def __init__(self, ama=False, mod="", t_min=10, xxp_limit=10, m_pi=0.13975, zw=1.28*10.**8., zv=0.73457):
-        self.ensemble = "24D"
-        self.ensemble_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2/" + self.ensemble
+    def __init__(self, ama, mod, xxp_limit):
+        self.ensemble = "24D-0.00107"
         self.l = 24
-        self.ama = ama
-        self.mod = mod
-        self.t_min = t_min
-        self.xxp_limit = xxp_limit
-        self.m_pi = m_pi
-        self.zw = zw
-        self.zv = zv
-        if self.ama is True:
-            self.f2_jk_dict_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/" + self.ensemble + ";ama;t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0"
-        else:
-            self.f2_jk_dict_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/" + self.ensemble + ";t-min=" + str(self.t_min).zfill(4) + ";xxp-limit=" + str(self.xxp_limit) + ";mod=" + str(self.mod) + ";type=0;accuracy=0"
-        self.traj_list = [
-            1010, 1030, 1050, 1070, 1090, 1110, 1140, 1160, 1180, 1220, 1240, 1260, 1280, 1300, 1320, 1360, 1380, 1400,
-            1420, 1440, 1460, 1480, 1500, 1520, 1540, 1560, 1580, 1600, 1620, 1640, 1660, 1680, 1700, 1720, 1740, 1760,
-            1780, 1800, 1820, 1840, 1860, 1880, 1900, 1920, 1940, 1960, 1980, 2000, 2020, 2040, 2060, 2080, 2120, 2140,
-            2160, 2180, 2200, 2220, 2240, 2260, 2280]
-        self.traj_list = [1800,1800]
-        self.traj_pair_list = self.make_traj_pair_list()
+        self.m_pi = 0.13975
+        self.t_min = 10
+        # self.zw = 1.28 * 10. ** 8.
+        self.zw = 131683077.512
+        self.zv = 0.73457
         self.num_row = 80
         self.num_col = 40
+        self.muon = 0.1056583745 / 1.015
+
+        self.ama = ama
+        self.mod = mod
+        self.xxp_limit = xxp_limit
+
+        # setup
+        f2_path = "./data/f2"
+        self.ensemble_path = f2_path + '/' + self.ensemble
+        self.traj_pair_list = self.make_traj_pair_list(1000, 2640, 50, 10)
         print "Traj Pair List"
         print self.traj_pair_list
+
         return
 
 
@@ -401,11 +432,13 @@ class Do32DLatticeAnalysis(DoLatticeAnalysis):
         self.ensemble = "32D-0.00107"
         self.l = 32
         self.m_pi = 0.139474
-        self.zw = 3.24457020e+08
+        # self.zw = 3.24457020e+08
+        self.zw = 319649623.111
         self.zv = 0.73464
         self.t_min = 10
         self.num_row = 80
         self.num_col = 40
+        self.muon = 0.1056583745 / 1.015
 
         # input
         self.ama = ama
@@ -413,11 +446,39 @@ class Do32DLatticeAnalysis(DoLatticeAnalysis):
         self.xxp_limit = xxp_limit
 
         # setup
-        f2_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/data/f2"
+        f2_path = "./data/f2"
         self.ensemble_path = f2_path + '/' + self.ensemble
-        f2_jk_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/"
-        # self.f2_jk_dict_path = f2_jk_path + '/' + self.get_traj_pair_folder_name()
         self.traj_pair_list = self.make_traj_pair_list(680, 1370, 50, 10)
+        print "Traj Pair List"
+        print self.traj_pair_list
+        # f2_jk_path = "/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/ana-data/f2/jk/"
+        # self.f2_jk_dict_path = f2_jk_path + '/' + self.get_traj_pair_folder_name()
+        return
+
+
+class Do32DfineLatticeAnalysis(DoLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        # basic info
+        self.ensemble = "32Dfine-0.0001"
+        self.l = 32
+        self.m_pi = 0.10468
+        self.zw = 772327306.431
+        self.zv = 0.68339
+        self.t_min = 14
+        self.num_row = 80
+        self.num_col = 40
+        self.muon = 0.1056583745 / 1.378
+
+        # input
+        self.ama = ama
+        self.mod = mod
+        self.xxp_limit = xxp_limit
+
+        # setup
+        f2_path = "./data/f2"
+        self.ensemble_path = f2_path + '/' + self.ensemble
+        self.traj_pair_list = self.make_traj_pair_list(100, 430, 50, 10)
         print "Traj Pair List"
         print self.traj_pair_list
         return
@@ -425,22 +486,110 @@ class Do32DLatticeAnalysis(DoLatticeAnalysis):
 
 if __name__ == '__main__':
     # plot luchang table
-    LUCHANG_PATH = '/Users/tucheng/Desktop/Physics/research/hlbl-pion/hlbl-pion-analysis/test/tab.txt'
+    LUCHANG_PATH = './data/f2/luchang/tab.txt'
     UNIT = 0.1
     R_RANGE = range(20, 21)
-    plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0', label='pion pole model')
+    plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0', label='pion pole model', color='black')
 
-    ana_24 = Do24DLatticeAnalysis(mod='', ama=True, xxp_limit=12)
+    path_save_f2_jk = './data-analysis/'
+
+    xxp_limit = 14
+    fname = '32Dfine-0.0001;ama;xxp_limit=14;mod=;jk(5)'
+    ana_32dfine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32dfine.read_f2_jk_mean_err(path_save_f2_jk + '/' + fname + '.mean',
+                               path_save_f2_jk + '/' + fname + '.err',
+                               fname)
+    ana_32dfine.plt_f2_jk(rows=range(15, 20), color='g')
+
+    xxp_limit = 12
+    fname = '32D-0.00107;ama;xxp_limit=12;mod=;jk(20)'
+    ana_32d = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32d.read_f2_jk_mean_err(path_save_f2_jk + '/' + fname + '.mean',
+                                    path_save_f2_jk + '/' + fname + '.err',
+                                    fname)
+    ana_32d.plt_f2_jk(rows=range(15, 20), color='r')
+
+    xxp_limit = 12
+    fname = '24D-0.00107;ama;xxp_limit=12;mod=;jk(11)'
+    ana_24d = Do24DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24d.read_f2_jk_mean_err(path_save_f2_jk + '/' + fname + '.mean',
+                                path_save_f2_jk + '/' + fname + '.err',
+                                fname)
+    ana_24d.plt_f2_jk(rows=range(15, 20), color='b')
+
+    '''
+    xxp_limit = 10
+    ana_24 = Do24DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
     ana_24.get_all_config_f2(1024)
-    # ana_32.plt_all_config_f2(color='b', rows=range(15, 20))
     ana_24.get_f2_jk_dict()
-    ana_24.plt_f2_jk(rows=range(10, 20), color='g', label='24D ama xxp_limit=10 jk (' + str(ana_24.num_configs) + ')')
+    ana_24.get_f2_jk_mean_err()
+    ana_24.get_label()
+    ana_24.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_24.plt_f2_jk(rows=range(10, 20), color='g')
 
-    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=12)
+    xxp_limit = 10
+    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
     ana_32.get_all_config_f2(1024)
-    # ana_32.plt_all_config_f2(color='b', rows=range(15, 20))
     ana_32.get_f2_jk_dict()
-    ana_32.plt_f2_jk(rows=range(10, 20), color='g', label='32D ama xxp_limit=10 jk (' + str(ana_32.num_configs) + ')')
+    ana_32.get_f2_jk_mean_err()
+    ana_32.get_label()
+    ana_32.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_32.plt_f2_jk(rows=range(10, 20), color='r')
+
+    xxp_limit = 10
+    ana_32_fine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine.get_all_config_f2(1024)
+    ana_32_fine.get_f2_jk_dict()
+    ana_32_fine.get_f2_jk_mean_err()
+    ana_32_fine.get_label()
+    ana_32_fine.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_32_fine.plt_f2_jk(rows=range(10, 20), color='b')
+
+    xxp_limit = 12
+    ana_24 = Do24DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24.get_all_config_f2(1024)
+    ana_24.get_f2_jk_dict()
+    ana_24.get_f2_jk_mean_err()
+    ana_24.get_label()
+    ana_24.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_24.plt_f2_jk(rows=range(10, 20), color='g')
+
+    xxp_limit = 12
+    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32.get_all_config_f2(1024)
+    ana_32.get_f2_jk_dict()
+    ana_32.get_f2_jk_mean_err()
+    ana_32.get_label()
+    ana_32.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_32.plt_f2_jk(rows=range(10, 20), color='r')
+
+    xxp_limit = 12
+    ana_32_fine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine.get_all_config_f2(1024)
+    ana_32_fine.get_f2_jk_dict()
+    ana_32_fine.get_f2_jk_mean_err()
+    ana_32_fine.get_label()
+    ana_32_fine.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_32_fine.plt_f2_jk(rows=range(10, 20), color='b')
+
+    xxp_limit = 14
+    ana_32 = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32.get_all_config_f2(1024)
+    ana_32.get_f2_jk_dict()
+    ana_32.get_f2_jk_mean_err()
+    ana_32.get_label()
+    ana_32.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_32.plt_f2_jk(rows=range(10, 20), color='r')
+
+    xxp_limit = 14
+    ana_32_fine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine.get_all_config_f2(1024)
+    ana_32_fine.get_f2_jk_dict()
+    ana_32_fine.get_f2_jk_mean_err()
+    ana_32_fine.get_label()
+    ana_32_fine.save_f2_jk_mean_err(path_save_f2_jk)
+    ana_32_fine.plt_f2_jk(rows=range(10, 20), color='b')
+    '''
 
     plt.show()
 
