@@ -21,6 +21,10 @@ class WallWallCorr:
             self.pion = 0.13975
             self.traj_start = 1000
             self.traj_end = 2640
+        elif self.ensemble == '24D-0.0174':
+            self.pion = 0.3357
+            self.traj_start = 200
+            self.traj_end = 560
         elif self.ensemble == '32D-0.00107':
             self.pion = 0.139474
             self.traj_start = 680
@@ -87,6 +91,14 @@ class WallWallCorr:
 if __name__ == '__main__':
 
     wwc = WallWallCorr('24D-0.00107', 'ama')
+    wwc.read_all_traj()
+    wwc.compute_corr_mean_err()
+    wwc.compute_zw_mean_err()
+    wwc.plt_zw('r', '')
+    plt.show()
+    print(wwc.zw_mean[10])
+
+    wwc = WallWallCorr('24D-0.0174', 'ama')
     wwc.read_all_traj()
     wwc.compute_corr_mean_err()
     wwc.compute_zw_mean_err()
