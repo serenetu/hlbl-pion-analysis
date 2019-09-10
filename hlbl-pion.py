@@ -280,18 +280,24 @@ class DoLatticeAnalysis(object):
         '''
         return
 
-    def read_traj_pair_list(self, traj_start, traj_end, step=10, numpairs=10000, seplimit=50):
+    def read_traj_pair_list(self):
         res = []
-        file_name = 'ensemble:{}_start:{}_end:{}_step:{}_numpairs:{}_seplimit:{}'.format(
-            self.ensemble,
-            traj_start,
-            traj_end,
-            step,
-            numpairs,
-            seplimit
-        )
+        file_name = ''
+        if self.ensemble == "24D-0.00107":
+            file_name = 'ensemble:' + self.ensemble + '_start:1000_end:3000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == '24D-0.0174':
+            file_name = 'ensemble:' + self.ensemble + '_start:200_end:1000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == '32D-0.00107':
+            file_name = 'ensemble:' + self.ensemble + '_start:680_end:2000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == "32Dfine-0.0001":
+            file_name = 'ensemble:' + self.ensemble + '_start:200_end:2000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == '48I-0.00078':
+            file_name = 'ensemble:' + self.ensemble + '_start:500_end:3000_step:10_numpairs:10000_seplimit:50'
+        else:
+            raise BaseException('No Such Ensemble')
+
         file_path = './TrajPairs/' + file_name
-        f = open(file_name, 'r')
+        f = open(file_path, 'r')
         for line in f:
             one_pair = line.split(' ')
             res.append((int(one_pair[0]), int(one_pair[1])))
@@ -408,6 +414,18 @@ class DoLatticeAnalysis(object):
         print 'num_configs: ' + str(self.num_configs)
         return
 
+    def save_all_config_f2(self, f2_path):
+        ensemble_f2_path = f2_path + '/' + self.ensemble
+        for pair in self.traj_pair_list:
+            if pair not in self.f2_config_dict:
+                continue
+            file_path = ensemble_f2_path + '/' + '{},{}'.format(pair[0], pair[1])
+            f = open(file_path)
+            '''
+            lalalalalalalalalalalalalalalalala
+            '''
+            return
+
     def get_f2_mean_err(self):
         array = np.array(self.f2_config_dict.values())
         self.f2_mean = np.mean(array, axis=0)
@@ -423,12 +441,30 @@ class DoLatticeAnalysis(object):
         return
 
     def get_f2_jk_dict(self):
+        '''
+        '''
+        '''
         try:
             self.f2_config_dict
         except AttributeError:
             print 'Run get_all_config_f2 First'
             exit()
         self.f2_jk_dict = jk.make_jackknife_dict(self.f2_config_dict)
+        '''
+        config_set = set()
+        for pair in self.f2_config_dict:
+            config_set.add(pair[0])
+            config_set.add(pair[1])
+
+        for config in config_set:
+            array = []
+            for pair in self.f2_config_dict:
+                if config in pair:
+                    continue
+                array.append(self.f2_config_dict[pair])
+            array = np.array(array)
+            mean = np.mean(array, axis=0)
+            self.f2_jk_dict[config] = mean
         return
 
     def get_f2_jk_mean_err(self):
@@ -607,12 +643,15 @@ class Do32DfineLatticeAnalysis(DoLatticeAnalysis):
         self.zv = 0.68339
         self.t_min = 14
 
+        '''
         self.traj_start = 100
         self.traj_end = 430
         self.traj_jump = 50
         self.traj_sep = 10
+        '''
 
         self.compute_parameters()
+        self.read_traj_pair_list()
 
         self.show_info()
         return
