@@ -299,6 +299,7 @@ class DoLatticeAnalysis(object):
         file_path = './TrajPairs/' + file_name
         f = open(file_path, 'r')
         for line in f:
+            line = line.strip('\n')
             one_pair = line.split(' ')
             res.append((int(one_pair[0]), int(one_pair[1])))
         return res
@@ -414,17 +415,37 @@ class DoLatticeAnalysis(object):
         print 'num_configs: ' + str(self.num_configs)
         return
 
-    def save_all_config_f2(self, f2_path):
+    def load_one_config_f2(self, pair, f2_path):
         ensemble_f2_path = f2_path + '/' + self.ensemble
+        file_path = ensemble_f2_path + '/' + self.get_traj_pair_folder_name(pair)
+        if not os.path.exists(file_path):
+            return
+        self.f2_config_dict[pair] = np.loadtxt(file_path)
+        print('Load f2 from: ' + file_path)
+        return
+
+    def load_all_config_f2(self, f2_path):
+        self.f2_config_dict = {}
+        for pair in self.traj_pair_list:
+            self.load_one_config_f2(pair, f2_path)
+        print('Load All Config f2: {} pairs'.format(len(self.f2_config_dict)))
+        return
+
+    def save_one_config_f2(self, pair, f2_path):
+        ensemble_f2_path = f2_path + '/' + self.ensemble
+        if not os.path.exists(ensemble_f2_path):
+            os.mkdir(ensemble_f2_path)
+        file_path = ensemble_f2_path + '/' + self.get_traj_pair_folder_name(pair)
+        np.savetxt(file_path, self.f2_config_dict[pair])
+        print('Save One Pair f2 to: ' + file_path)
+        return
+
+    def save_all_config_f2(self, f2_path):
         for pair in self.traj_pair_list:
             if pair not in self.f2_config_dict:
                 continue
-            file_path = ensemble_f2_path + '/' + '{},{}'.format(pair[0], pair[1])
-            f = open(file_path)
-            '''
-            lalalalalalalalalalalalalalalalala
-            '''
-            return
+            self.save_one_config_f2(pair, f2_path)
+        return
 
     def get_f2_mean_err(self):
         array = np.array(self.f2_config_dict.values())
@@ -651,7 +672,7 @@ class Do32DfineLatticeAnalysis(DoLatticeAnalysis):
         '''
 
         self.compute_parameters()
-        self.read_traj_pair_list()
+        self.traj_pair_list = self.read_traj_pair_list()
 
         self.show_info()
         return
@@ -666,6 +687,14 @@ if __name__ == '__main__':
 
     path_save_f2_jk = './ana-data/f2/jk'
     path_save_f2 = './ana-data/f2/mean_err'
+    path_save_all_config_f2 = './ana-data/f2'
+
+    xxp_limit = 16
+    ana_32_fine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    # ana_32_fine.get_all_config_f2(1024)
+    # ana_32_fine.save_all_config_f2(path_save_all_config_f2)
+    ana_32_fine.load_all_config_f2(path_save_all_config_f2)
+    exit(0)
 
     xxp_limit = 10
     ana_24d_h = Do24DHeavyLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
