@@ -476,7 +476,9 @@ class DoLatticeAnalysis(object):
         for pair in self.f2_config_dict:
             config_set.add(pair[0])
             config_set.add(pair[1])
+        print(config_set)
 
+        self.f2_jk_dict = {}
         for config in config_set:
             array = []
             for pair in self.f2_config_dict:
@@ -547,7 +549,7 @@ class DoLatticeAnalysis(object):
             ama_label,
             self.xxp_limit,
             self.mod,
-            self.num_configs
+            len(self.f2_config_dict)
         )
         mean_err_save_label = res
         return mean_err_save_label
@@ -571,7 +573,7 @@ class DoLatticeAnalysis(object):
             ama_label,
             self.xxp_limit,
             self.mod,
-            self.num_configs
+            len(self.f2_jk_dict)
         )
         self.jk_mean_err_save_label = res
         return self.jk_mean_err_save_label
@@ -694,6 +696,13 @@ if __name__ == '__main__':
     # ana_32_fine.get_all_config_f2(1024)
     # ana_32_fine.save_all_config_f2(path_save_all_config_f2)
     ana_32_fine.load_all_config_f2(path_save_all_config_f2)
+    ana_32_fine.get_f2_jk_dict()
+    ana_32_fine.get_f2_jk_mean_err()
+    ana_32_fine.get_jk_mean_err_save_label()
+    ana_32_fine.plt_f2_jk()
+
+    plt.show()
+
     exit(0)
 
     xxp_limit = 10
