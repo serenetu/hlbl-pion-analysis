@@ -3,11 +3,71 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import jackknife as jk
+import ensemble as es
+
+
+def mod(x, length):
+    m = x % length
+    if 0 <= m:
+        return m
+    else:
+        return m + len
+
+
+def smod(x, length):
+    m = mod(x, length)
+    if m * 2 < length:
+        return m
+    else:
+        return m - length
+
+
+def smod_list(x_list, length):
+    res = []
+    for x in x_list:
+        res.append(smod(x, length))
+    return np.array(res)
+
+
+def abs_smod_list(x_list, length):
+    return np.absolute(smod_list(x_list, length))
 
 
 def read_complex_bi(path):
     x = np.fromfile(path, dtype='complex128')
     return np.real(x)
+
+
+class WallWallModelCorr:
+
+    def __init__(self, ensemble):
+        self.ensemble = ensemble
+        self.corr_path = './data/WallWallCorr/' + self.ensemble + '/pion-corr.txt'
+        return
+
+    def read_corr(self):
+        res = []
+        f = open(self.corr_path)
+        for i, line in enumerate(f):
+            if i == 0:
+                continue
+            res.append(float(line.split()[1]))
+        self.corr = np.array(res)
+        return self.corr
+
+    def get_zw(self):
+        self.zw = (
+                self.corr *
+                np.exp(
+                    abs_smod_list(range(len(self.corr)), len(self.corr)) *
+                    es.get_mpi(self.ensemble)
+                )
+        )
+        return
+
+    def plt_zw(self, color='r', label=''):
+        x = range(len(self.zw))
+        plt.errorbar(x, self.zw, marker='x', color=color, label=label)
 
 
 class WallWallCorr:
@@ -20,23 +80,23 @@ class WallWallCorr:
         if self.ensemble == '24D-0.00107':
             self.pion = 0.13975
             self.traj_start = 1000
-            self.traj_end = 2640
+            self.traj_end = 3000
         elif self.ensemble == '24D-0.0174':
             self.pion = 0.3357
             self.traj_start = 200
-            self.traj_end = 560
+            self.traj_end = 1000
         elif self.ensemble == '32D-0.00107':
             self.pion = 0.139474
             self.traj_start = 680
-            self.traj_end = 1370
+            self.traj_end = 2000
         elif self.ensemble == '32Dfine-0.0001':
             self.pion = 0.10468
-            self.traj_start = 100
-            self.traj_end = 430
+            self.traj_start = 200
+            self.traj_end = 2000
         elif self.ensemble == '48I-0.00078':
             self.pion = 0.08049
-            self.traj_start = 990
-            self.traj_end = 1770
+            self.traj_start = 500
+            self.traj_end = 3000
 
         self.__print_info()
 
@@ -89,6 +149,87 @@ class WallWallCorr:
 
 
 if __name__ == '__main__':
+    wwc_model = WallWallModelCorr('heavy-24nt96-1.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('heavy-32nt128-1.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('heavy-32nt128-1.3333')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('heavy-48nt192-1.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('heavy-48nt192-2.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+    exit(0)
+
+    wwc_model = WallWallModelCorr('physical-24nt96-1.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('physical-32nt128-1.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('physical-32nt128-1.3333')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('physical-48nt192-1.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+
+    wwc_model = WallWallModelCorr('physical-48nt192-2.0')
+    wwc_model.read_corr()
+    wwc_model.get_zw()
+    wwc_model.plt_zw()
+    plt.show()
+    print(wwc_model.zw)
+    exit(0)
+
+
+    wwc = WallWallCorr('48I-0.00078', 'ama')
+    wwc.read_all_traj()
+    wwc.compute_corr_mean_err()
+    wwc.compute_zw_mean_err()
+    wwc.plt_zw('r', '')
+    plt.show()
+    print(wwc.zw_mean[10])
+    exit(0)
 
     wwc = WallWallCorr('24D-0.00107', 'ama')
     wwc.read_all_traj()

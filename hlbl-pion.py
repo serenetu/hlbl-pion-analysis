@@ -4,6 +4,8 @@ from scipy.special import kn
 import matplotlib.pyplot as plt
 import os
 import jackknife as jk
+import ensemble as es
+import extrapolation as ex
 
 
 def read_table(fname):
@@ -140,6 +142,39 @@ def plt_table(table, table_std=None, unit=1., rows=None, ylim=None, xlim=None, c
     return
 
 
+def save_with_err(path, x, y, y_err):
+    f = open(path, 'w')
+    for i in range(len(x)):
+        f.write("{:.10E} {:.10E} {:.10E}\n".format(x[i], y[i], y_err[i]))
+    f.close()
+    return
+
+
+def save_without_err(path, x, y):
+    f = open(path, 'w')
+    for i in range(len(x)):
+        f.write("{:.10E} {:.10E}\n".format(x[i], y[i]))
+    f.close()
+    return
+
+
+def save_table_without_err(path, table, unit, row):
+    n_col = len(table[row])
+    x = np.arange(n_col) * unit
+    y = table[row]
+    save_without_err(path, x, y)
+    return
+
+
+def save_table_with_err(path, table, table_err, unit, row):
+    n_col = len(table[row])
+    x = np.arange(n_col) * unit
+    y = table[row]
+    y_err = table_err[row]
+    save_with_err(path, x, y, y_err)
+    return
+
+
 def compute_zp(l, m_pi):
     return 1. / (2. * m_pi * l ** 3.)
 
@@ -212,6 +247,7 @@ def plot_luchang_table(f_path, unit, r_range, intg='0toinf', label='', color='r'
     luchang_table = read_table_noimag(f_path)
     if intg == '0toinf':
         plt_table(luchang_table, unit=unit, rows=r_range, label=label, color=color)
+        return luchang_table
     elif intg == 'infto0':
         luchang_table = de_partial_sum(luchang_table)
         luchang_table = luchang_table[:, ::-1]
@@ -219,6 +255,7 @@ def plot_luchang_table(f_path, unit, r_range, intg='0toinf', label='', color='r'
         print('luchang table shape:')
         print(luchang_table.shape)
         plt_table(luchang_table[:, ::-1], unit=unit, rows=r_range, label=label, color=color)
+        return luchang_table[:, ::-1]
     return
 
 
@@ -231,8 +268,6 @@ class DoLatticeAnalysis(object):
         self.xxp_limit = xxp_limit
 
         # constant parameters
-        self.num_row = 80
-        self.num_col = 40
         self.f2_path = './data/f2'
 
         # other parameters
@@ -293,6 +328,14 @@ class DoLatticeAnalysis(object):
             file_name = 'ensemble:' + self.ensemble + '_start:200_end:2000_step:10_numpairs:10000_seplimit:50'
         elif self.ensemble == '48I-0.00078':
             file_name = 'ensemble:' + self.ensemble + '_start:500_end:3000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == "24D-0.00107-physical-pion":
+            file_name = 'ensemble:24D-0.00107_start:1000_end:3000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == "24D-0.0174-physical-pion":
+            file_name = 'ensemble:24D-0.0174_start:200_end:1000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == "32Dfine-0.0001-physical-pion":
+            file_name = 'ensemble:32Dfine-0.0001_start:200_end:2000_step:10_numpairs:10000_seplimit:50'
+        elif self.ensemble == '48I-0.00078-physical-pion':
+            file_name = 'ensemble:48I-0.00078_start:500_end:3000_step:10_numpairs:10000_seplimit:50'
         else:
             raise BaseException('No Such Ensemble')
 
@@ -384,7 +427,7 @@ class DoLatticeAnalysis(object):
             if intg == '0toinf':
                 one_table = one_table.transpose()
             elif intg == 'infto0':
-                one_table = one_table.transpose()[:, par_start:par_end]
+                one_table = one_table.transpose()[:, par_start:par_end + 1]
                 one_table = one_table[:, ::-1]
             one_table = partial_sum(one_table)
             one_table = one_table[:, ::-1]
@@ -398,21 +441,20 @@ class DoLatticeAnalysis(object):
         # plt.show()
         return table_avg, table_std
 
-    def get_all_config_f2(self, num_in_each_config):
-        count = 0
+    def get_all_config_f2(self, num_in_each_config, num_pairs=None):
         self.f2_config_dict = {}
         for pair in self.traj_pair_list:
             if not self.one_config_f2_valid(pair, num_in_each_config):
                 print "config " + str(pair) + " are not valid"
                 continue
+            if pair in self.f2_config_dict:
+                continue
             self.f2_config_dict[pair] = self.get_one_config_f2(
                 pair, par_start=0, par_end=self.inf_cut)[0]
-            count += 1
-            if count is None:
+            if len(self.f2_config_dict) == num_pairs:
                 break
-        self.num_configs = len(self.f2_config_dict)
         print 'Get All Config f2:'
-        print 'num_configs: ' + str(self.num_configs)
+        print 'num_configs: ' + str(len(self.f2_config_dict))
         return
 
     def load_one_config_f2(self, pair, f2_path):
@@ -424,10 +466,12 @@ class DoLatticeAnalysis(object):
         print('Load f2 from: ' + file_path)
         return
 
-    def load_all_config_f2(self, f2_path):
+    def load_all_config_f2(self, f2_path, num_limit=None):
         self.f2_config_dict = {}
         for pair in self.traj_pair_list:
             self.load_one_config_f2(pair, f2_path)
+            if len(self.f2_config_dict) == num_limit:
+                break
         print('Load All Config f2: {} pairs'.format(len(self.f2_config_dict)))
         return
 
@@ -476,7 +520,7 @@ class DoLatticeAnalysis(object):
         for pair in self.f2_config_dict:
             config_set.add(pair[0])
             config_set.add(pair[1])
-        print(config_set)
+        print(len(config_set), config_set)
 
         self.f2_jk_dict = {}
         for config in config_set:
@@ -494,12 +538,15 @@ class DoLatticeAnalysis(object):
         self.f2_jk_mean, self.f2_jk_err = jk.jackknife_avg_err_dict(self.f2_jk_dict)
         return
 
-    def save_f2_jk_mean_err(self, path):
+    def save_f2_jk_mean_err(self, row, path):
+        save_table_with_err(path, self.f2_jk_mean, self.f2_jk_err, self.a, row)
+        '''
         print('f2 jk mean err:')
         print(self.f2_jk_mean)
         print(self.f2_jk_err)
         np.savetxt(path + '/' + self.jk_mean_err_save_label + '.mean', self.f2_jk_mean)
         np.savetxt(path + '/' + self.jk_mean_err_save_label + '.err', self.f2_jk_err)
+        '''
         return
 
     def save_f2_jk_dict(self, path=None):
@@ -529,13 +576,13 @@ class DoLatticeAnalysis(object):
                 self.f2_jk_dict[key] = np.load(save_path + '/' + f)
         return
 
-    def plt_f2_jk(self, rows=range(10, 11), color='r'):
+    def plt_f2_jk(self, rows=range(10, 11), color='r', label=''):
         # self.f2_jk_mean, self.f2_jk_err = jk.jackknife_avg_err_dict(self.f2_jk_dict)
-        plt_table(self.f2_jk_mean, self.f2_jk_err, unit=self.a, rows=rows, color=color, label=self.jk_mean_err_save_label)
+        plt_table(self.f2_jk_mean, self.f2_jk_err, unit=self.a, rows=rows, color=color, label=label)
         return
 
-    def plt_f2(self, rows=range(10, 11), color='r'):
-        label = self.get_mean_err_save_label()
+    def plt_f2(self, rows=range(10, 11), color='r', label=''):
+        # label = self.get_mean_err_save_label()
         plt_table(self.f2_mean, self.f2_err, unit=self.a, rows=rows, color=color, label=label)
         return
 
@@ -590,20 +637,45 @@ class Do24DLatticeAnalysis(DoLatticeAnalysis):
     def __init__(self, ama, mod, xxp_limit):
         super(Do24DLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
         self.ensemble = "24D-0.00107"
-        self.l = 24
-        self.ainv = 1.015
-        self.m_pi = 0.13975  # lattice unit
-        self.zw = 131683077.512
-        self.zv = 0.72672
+        self.l = es.get_l(self.ensemble)
+        self.ainv = es.get_ainv(self.ensemble)
+        self.m_pi = es.get_mpi(self.ensemble)  # lattice unit
+        self.zw = es.get_zw(self.ensemble)
+        self.zv = es.get_zv(self.ensemble)
         self.t_min = 10
 
-        self.traj_start = 1000
-        self.traj_end = 2640
-        self.traj_jump = 50
-        self.traj_sep = 10
+        self.num_row = 80
+        self.num_col = 40
+
+        # self.traj_start = 1000
+        # self.traj_end = 2640
+        # self.traj_jump = 50
+        # self.traj_sep = 10
 
         self.compute_parameters()
+        self.traj_pair_list = self.read_traj_pair_list()
+        # self.traj_pair_list = self.make_traj_pair_list(1000, 2640, 50, 10)
 
+        self.show_info()
+        return
+
+
+class Do24DPhysicalPionLatticeAnalysis(Do24DLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do24DPhysicalPionLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "24D-0.00107-physical-pion"
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
+        self.show_info()
+        return
+
+
+class Do24DRefineFieldLatticeAnalysis(Do24DLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do24DRefineFieldLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "24D-0.00107-refine-field"
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
         self.show_info()
         return
 
@@ -613,12 +685,15 @@ class Do24DHeavyLatticeAnalysis(DoLatticeAnalysis):
     def __init__(self, ama, mod, xxp_limit):
         super(Do24DHeavyLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
         self.ensemble = "24D-0.0174"
-        self.l = 24
-        self.ainv = 1.015
-        self.m_pi = 0.3357  # lattice unit
-        self.zw = 58760419.01434206
-        self.zv = 0.72672
+        self.l = es.get_l(self.ensemble)
+        self.ainv = es.get_ainv(self.ensemble)
+        self.m_pi = es.get_mpi(self.ensemble)  # lattice unit
+        self.zw = es.get_zw(self.ensemble)
+        self.zv = es.get_zv(self.ensemble)
         self.t_min = 10
+
+        self.num_row = 80
+        self.num_col = 40
 
         self.traj_start = 200
         self.traj_end = 560
@@ -626,7 +701,18 @@ class Do24DHeavyLatticeAnalysis(DoLatticeAnalysis):
         self.traj_sep = 10
 
         self.compute_parameters()
+        self.traj_pair_list = self.read_traj_pair_list()
 
+        self.show_info()
+        return
+
+
+class Do24DHeavyPhysicalPionLatticeAnalysis(Do24DHeavyLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do24DHeavyPhysicalPionLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "24D-0.0174-physical-pion"
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
         self.show_info()
         return
 
@@ -636,12 +722,15 @@ class Do32DLatticeAnalysis(DoLatticeAnalysis):
     def __init__(self, ama, mod, xxp_limit):
         super(Do32DLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
         self.ensemble = "32D-0.00107"
-        self.l = 32
-        self.ainv = 1.015
-        self.m_pi = 0.139474  # lattice unit
-        self.zw = 319649623.111
-        self.zv = 0.7260
+        self.l = es.get_l(self.ensemble)
+        self.ainv = es.get_ainv(self.ensemble)
+        self.m_pi = es.get_mpi(self.ensemble)  # lattice unit
+        self.zw = es.get_zw(self.ensemble)
+        self.zv = es.get_zv(self.ensemble)
         self.t_min = 10
+
+        self.num_row = 80
+        self.num_col = 40
 
         self.traj_start = 680
         self.traj_end = 1370
@@ -649,7 +738,18 @@ class Do32DLatticeAnalysis(DoLatticeAnalysis):
         self.traj_sep = 10
 
         self.compute_parameters()
+        self.traj_pair_list = self.read_traj_pair_list()
 
+        self.show_info()
+        return
+
+
+class Do32DPhysicalPionLatticeAnalysis(Do32DLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do32DPhysicalPionLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "32D-0.00107-physical-pion"
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
         self.show_info()
         return
 
@@ -659,11 +759,11 @@ class Do32DfineLatticeAnalysis(DoLatticeAnalysis):
     def __init__(self, ama, mod, xxp_limit):
         super(Do32DfineLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
         self.ensemble = "32Dfine-0.0001"
-        self.l = 32
-        self.ainv = 1.378
-        self.m_pi = 0.10468
-        self.zw = 772327306.431
-        self.zv = 0.68339
+        self.l = es.get_l(self.ensemble)
+        self.ainv = es.get_ainv(self.ensemble)
+        self.m_pi = es.get_mpi(self.ensemble)  # lattice unit
+        self.zw = es.get_zw(self.ensemble)
+        self.zv = es.get_zv(self.ensemble)
         self.t_min = 14
 
         '''
@@ -673,6 +773,9 @@ class Do32DfineLatticeAnalysis(DoLatticeAnalysis):
         self.traj_sep = 10
         '''
 
+        self.num_row = 100
+        self.num_col = 40
+
         self.compute_parameters()
         self.traj_pair_list = self.read_traj_pair_list()
 
@@ -680,16 +783,545 @@ class Do32DfineLatticeAnalysis(DoLatticeAnalysis):
         return
 
 
+class Do32DfinePhysicalPionLatticeAnalysis(Do32DfineLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do32DfinePhysicalPionLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "32Dfine-0.0001-physical-pion"
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
+        self.show_info()
+        return
+
+
+class Do48ILatticeAnalysis(DoLatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do48ILatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "48I-0.00078"
+        self.l = 48
+        self.ainv = 1.73
+        self.m_pi = 0.08049
+        self.zw = 5082918150.729124
+        self.zv = 0.71076
+        self.t_min = 16
+
+        self.num_row = 120
+        self.num_col = 60
+
+        self.compute_parameters()
+        self.traj_pair_list = self.read_traj_pair_list()
+        # self.traj_pair_list = self.make_traj_pair_list(1590, 3000, 60, 20)
+
+        self.show_info()
+        return
+
+
+class Do48IPhysicalPionLatticeAnalysis(Do48ILatticeAnalysis):
+
+    def __init__(self, ama, mod, xxp_limit):
+        super(Do48IPhysicalPionLatticeAnalysis, self).__init__(ama, mod, xxp_limit)
+        self.ensemble = "48I-0.00078-physical-pion"
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
+        self.show_info()
+        return
+
+
+class DoModelAnalysis(object):
+
+    def __init__(self, ensemble):
+        self.f2_path = './data/f2'
+
+        self.ensemble = ensemble
+        self.ensemble_path = self.f2_path + '/' + self.ensemble
+        self.inf_cut = int(10. / es.get_a(self.ensemble))  # 10 fm
+
+        self.num_row = 120
+        self.num_col = 60
+        return
+
+    def get_a(self):
+        return es.get_a(self.ensemble)
+
+    def get_model_factor(self):
+        e = 0.30282212
+        three = 3
+        muon = 0.1056583745 / es.get_ainv(self.ensemble)
+        zp = compute_zp(es.get_l(self.ensemble), es.get_mpi(self.ensemble))
+        zw = es.get_zw(self.ensemble)
+        return 2. * muon * e ** 6. * three / 2. / 3. / (zp * zw)
+
+    def get_model_f2(self, intg='infto0'):
+        print 'Get Model f2:'
+        pair_path = self.ensemble_path
+        table_all_ = read_all_bi_table(pair_path, num_row=self.num_row, num_col=self.num_col)
+
+        table_all = []
+        num_pairs = table_all_.shape[0]
+        for i in range(0, num_pairs):
+            one_table = table_all_[i][:]
+            if intg == '0toinf':
+                one_table = one_table.transpose()
+            elif intg == 'infto0':
+                one_table = one_table.transpose()[:, 0:self.inf_cut + 1]
+                one_table = one_table[:, ::-1]
+            one_table = partial_sum(one_table)
+            one_table = one_table[:, ::-1]
+            table_all.append(one_table)
+        table_all = np.array(table_all).real
+        print('(num_pairs, r, R): ' + str(table_all.shape))
+        table_avg = np.average(table_all, axis=0)
+        table_std = np.std(table_all, axis=0) * len(table_all) ** (-1./2.)
+
+        self.model_f2 = 10. ** 10. * table_avg * self.get_model_factor()
+        self.model_f2_err = 10. ** 10. * table_std * self.get_model_factor()
+        return
+
+    def save_model_f2_table(self, path):
+        np.savetxt(path + '/' + self.ensemble + '-mean', self.model_f2)
+        np.savetxt(path + '/' + self.ensemble + '-err', self.model_f2_err)
+        return
+
+    def save_model_f2_mean_err(self, path, row):
+        save_table_with_err(path, self.model_f2, self.model_f2_err, self.get_a(), row)
+
+    def load_model_f2(self, path):
+        self.model_f2 = np.loadtxt(path + '/' + self.ensemble + '-mean')
+        self.model_f2_err = np.loadtxt(path + '/' + self.ensemble + '-err')
+        return
+
+    def plt_model_f2(self, rows, color='r', label=''):
+        plt_table(
+            self.model_f2, table_std=self.model_f2_err,
+            unit=es.get_a(self.ensemble), rows=rows, color=color, label=label
+        )
+        return
+
+
+def get_a0_extrapolation_list(a_list, y_list_list, yerr_list_list):
+    assert len(a_list) == len(y_list_list) == len(yerr_list_list)
+    x = np.array(a_list) ** 2.
+    num_point = len(y_list_list[0])
+    res = []
+    res_err = []
+    for i in range(num_point):
+        y = [y_list_list[row][i] for row in range(len(y_list_list))]
+        y_err = [yerr_list_list[row][i] for row in range(len(yerr_list_list))]
+        y_extra, y_err_extra = ex.Extrapolate(x, y, y_err).extrapolate_to(0.)
+        res.append(y_extra)
+        res_err.append(y_err_extra)
+    return res, res_err
+
+
+def get_f2_interp(f2, x_linspace, a):
+    x = np.arange(len(f2)) * a
+    f2_interp = np.interp(x_linspace, x, f2)
+    return f2_interp
+
+
 if __name__ == '__main__':
+
     # plot luchang table
     LUCHANG_PATH = './data/f2/luchang/tab.txt'
     UNIT = 0.1
     R_RANGE = range(20, 21)
-    plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0', label='pion pole model', color='black')
+    luchang_table = plot_luchang_table(LUCHANG_PATH, UNIT, R_RANGE, intg='infto0', label='pion pole model', color='black')
+    save_table_without_err('./out/hlbl-pion/luchang.txt', np.real(luchang_table), UNIT, 20)
+    # plt.show()
 
     path_save_f2_jk = './ana-data/f2/jk'
-    path_save_f2 = './ana-data/f2/mean_err'
+    path_save_f2 = './out/hlbl-pion'
     path_save_all_config_f2 = './ana-data/f2'
+    x_linspace = np.linspace(0, 10, 101)
+
+    # ==================================================================================================================
+    ensemble = 'physical-24nt96-1.0'
+    # ensemble = 'heavy-24nt96-1.0'
+    ana_model = DoModelAnalysis(ensemble)
+    # ana_model.get_model_f2()
+    # ana_model.save_model_f2_table(path_save_all_config_f2)
+    ana_model.load_model_f2(path_save_all_config_f2)
+    ana_model.plt_model_f2(rows=range(12, 13), label=ensemble, color='y')
+    ana_model.save_model_f2_mean_err(path=path_save_f2 + '/' + ensemble + '.txt', row=12)
+
+    f2_24_interp = get_f2_interp(ana_model.model_f2[12], x_linspace, ana_model.get_a())
+    f2_err_24_interp = get_f2_interp(ana_model.model_f2_err[12], x_linspace, ana_model.get_a())
+    a_24 = ana_model.get_a()
+
+    ensemble = 'physical-32nt128-1.0'
+    # ensemble = 'heavy-32nt128-1.0'
+    ana_model = DoModelAnalysis(ensemble)
+    # ana_model.get_model_f2()
+    # ana_model.save_model_f2_table(path_save_all_config_f2)
+    ana_model.load_model_f2(path_save_all_config_f2)
+    ana_model.plt_model_f2(rows=range(16, 17), label=ensemble, color='g')
+    ana_model.save_model_f2_mean_err(path=path_save_f2 + '/' + ensemble + '.txt', row=16)
+
+    f2_32_interp = get_f2_interp(ana_model.model_f2[16], x_linspace, ana_model.get_a())
+    f2_err_32_interp = get_f2_interp(ana_model.model_f2_err[16], x_linspace, ana_model.get_a())
+    a_32 = ana_model.get_a()
+
+    ensemble = 'physical-48nt192-1.0'
+    # ensemble = 'heavy-48nt192-1.0'
+    ana_model = DoModelAnalysis(ensemble)
+    # ana_model.get_model_f2()
+    # ana_model.save_model_f2_table(path_save_all_config_f2)
+    ana_model.load_model_f2(path_save_all_config_f2)
+    ana_model.plt_model_f2(rows=range(24, 25), label=ensemble, color='b')
+    ana_model.save_model_f2_mean_err(path=path_save_f2 + '/' + ensemble + '.txt', row=24)
+
+    f2_48_interp = get_f2_interp(ana_model.model_f2[24], x_linspace, ana_model.get_a())
+    f2_err_48_interp = get_f2_interp(ana_model.model_f2_err[24], x_linspace, ana_model.get_a())
+    a_48 = ana_model.get_a()
+
+    ensemble = 'physical-32nt128-1.3333'
+    # ensemble = 'heavy-32nt128-1.3333'
+    ana_model = DoModelAnalysis(ensemble)
+    # ana_model.get_model_f2()
+    # ana_model.save_model_f2_table(path_save_all_config_f2)
+    ana_model.load_model_f2(path_save_all_config_f2)
+    ana_model.plt_model_f2(rows=range(16, 17), label=ensemble, color='r')
+    ana_model.save_model_f2_mean_err(path=path_save_f2 + '/' + ensemble + '.txt', row=16)
+
+    f2_32fine_interp = get_f2_interp(ana_model.model_f2[16], x_linspace, ana_model.get_a())
+    f2_err_32fine_interp = get_f2_interp(ana_model.model_f2_err[16], x_linspace, ana_model.get_a())
+    a_32fine = ana_model.get_a()
+
+    ensemble = 'physical-48nt192-2.0'
+    # ensemble = 'heavy-48nt192-2.0'
+    ana_model = DoModelAnalysis(ensemble)
+    # ana_model.get_model_f2()
+    # ana_model.save_model_f2_table(path_save_all_config_f2)
+    ana_model.load_model_f2(path_save_all_config_f2)
+    ana_model.plt_model_f2(rows=range(24, 25), label=ensemble, color='c')
+    ana_model.save_model_f2_mean_err(path=path_save_f2 + '/' + ensemble + '.txt', row=24)
+
+    f2_48fine_interp = get_f2_interp(ana_model.model_f2[24], x_linspace, ana_model.get_a())
+    f2_err_48fine_interp = get_f2_interp(ana_model.model_f2_err[24], x_linspace, ana_model.get_a())
+    a_48fine = ana_model.get_a()
+
+    # discretization correction
+    extra_mean, extra_err = ex.get_a2_extrapolation_list(
+        [a_24, a_32fine],
+        [f2_24_interp, f2_32fine_interp],
+        [f2_err_24_interp, f2_err_32fine_interp]
+    )
+    # print(extra_mean)
+    plt.errorbar(x_linspace, extra_mean, yerr=extra_err, marker='*', label='discretization correction')
+    save_with_err(path_save_f2 + '/model-discretization-correction.txt', x_linspace, extra_mean, extra_err)
+
+    # finite vol
+    y = extra_mean + f2_32_interp - f2_24_interp
+    plt.errorbar(x_linspace, y, yerr=extra_err, marker='*', label='discretization + finite vol correction')
+    save_with_err(path_save_f2 + '/model-discretization+finite-vol-correction-(24, 32fine, 32).txt', x_linspace, y, extra_err)
+
+    plt.legend()
+    plt.show()
+    exit(0)
+
+    # discretization correction
+    extra_mean, extra_err = ex.get_a2_extrapolation_list(
+        [a_32, a_48fine],
+        [f2_32_interp, f2_48fine_interp],
+        [f2_err_32_interp, f2_err_48fine_interp]
+    )
+    # print(extra_mean)
+    plt.errorbar(x_linspace, extra_mean, yerr=extra_err, marker='*', label='discretization correction (32, 48fine)')
+    save_with_err(path_save_f2 + '/model-discretization-correction-(32,48fine).txt', x_linspace, extra_mean, extra_err)
+
+    # finite vol
+    y = extra_mean + f2_48_interp - f2_32_interp
+    plt.errorbar(x_linspace, y, yerr=extra_err, marker='*', label='discretization + finite vol correction (32, 48fine, 48)')
+    save_with_err(path_save_f2 + '/model-discretization+finite-vol-correction-(32, 48fine, 48).txt', x_linspace, y, extra_err)
+
+    plt.legend()
+    plt.show()
+    exit(0)
+
+    # ==================================================================================================================
+    # 24
+    ana_24_physical_pion = Do24DPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=12)
+    # ana_24_physical_pion.get_all_config_f2(1024)
+    # ana_24_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    ana_24_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    ana_24_physical_pion.get_f2_jk_dict()
+    ana_24_physical_pion.get_f2_jk_mean_err()
+    ana_24_physical_pion.plt_f2_jk(rows=range(12, 13), color='g', label='24D_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+    ana_24_physical_pion.save_f2_jk_mean_err(row=12, path=path_save_f2 + '/24D_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk.txt')
+    # 24 interp
+    ana_24_mean, ana_24_err = ana_24_physical_pion.f2_jk_mean[12], ana_24_physical_pion.f2_jk_err[12]
+    ana_24_x = np.arange(len(ana_24_mean)) * ana_24_physical_pion.a
+    ana_24_mean = np.interp(x_linspace, ana_24_x, ana_24_mean)
+    ana_24_err = np.interp(x_linspace, ana_24_x, ana_24_err)
+    print('24')
+    print(ana_24_mean[0:101:5])
+    print(ana_24_err[0:101:5])
+
+    # 32
+    ana_32_physical_pion = Do32DPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=16)
+    # ana_32_physical_pion.get_all_config_f2(1024)
+    # ana_32_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    ana_32_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    ana_32_physical_pion.get_f2_jk_dict()
+    ana_32_physical_pion.get_f2_jk_mean_err()
+    ana_32_physical_pion.plt_f2_jk(rows=range(16, 17), color='b', label='32D_physical_pion_xxp:16(3.11fm)_min:16(3.11fm)_ama_jk')
+    ana_32_physical_pion.save_f2_jk_mean_err(row=16, path=path_save_f2 + '/32D_physical_pion_xxp:16(3.11fm)_min:16(3.11fm)_ama_jk.txt')
+    # 32 interp
+    ana_32_mean, ana_32_err = ana_32_physical_pion.f2_jk_mean[16], ana_32_physical_pion.f2_jk_err[16]
+    ana_32_x = np.arange(len(ana_32_mean)) * ana_32_physical_pion.a
+    ana_32_mean = np.interp(x_linspace, ana_32_x, ana_32_mean)
+    ana_32_err = np.interp(x_linspace, ana_32_x, ana_32_err)
+    print('32')
+    print(ana_32_mean[0:101:5])
+    print(ana_32_err[0:101:5])
+
+    # 32 fine
+    ana_32_fine_physical_pion = Do32DfinePhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=16)
+    # ana_32_fine_physical_pion.get_all_config_f2(1024)
+    # ana_32_fine_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    ana_32_fine_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    ana_32_fine_physical_pion.get_f2_jk_dict()
+    ana_32_fine_physical_pion.get_f2_jk_mean_err()
+    ana_32_fine_physical_pion.plt_f2_jk(rows=range(16, 17), color='r', label='32Dfine_physical_pion_xxp:16(2.29fm)_min:16(2.29fm)_ama_jk')
+    ana_32_fine_physical_pion.save_f2_jk_mean_err(row=16, path=path_save_f2 + '/32Dfine_physical_pion_xxp:16(2.29fm)_min:16(2.29fm)_ama_jk.txt')
+    # 32 fine interp
+    ana_32_fine_mean, ana_32_fine_err = ana_32_fine_physical_pion.f2_jk_mean[16], ana_32_fine_physical_pion.f2_jk_err[16]
+    ana_32_fine_x = np.arange(len(ana_32_fine_mean)) * ana_32_fine_physical_pion.a
+    ana_32_fine_mean = np.interp(x_linspace, ana_32_fine_x, ana_32_fine_mean)
+    ana_32_fine_err = np.interp(x_linspace, ana_32_fine_x, ana_32_fine_err)
+    print('32 fine')
+    print(ana_32_fine_mean[0:101:5])
+    print(ana_32_fine_err[0:101:5])
+
+    # 48
+    ana_48_physical_pion = Do48IPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=24)
+    # ana_48_physical_pion.get_all_config_f2(1024)
+    # ana_48_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    ana_48_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    ana_48_physical_pion.get_f2_jk_dict()
+    ana_48_physical_pion.get_f2_jk_mean_err()
+    ana_48_physical_pion.get_jk_mean_err_save_label()
+    ana_48_physical_pion.plt_f2_jk(rows=range(24, 25), color='y', label='48I_physical_pion_xxp:24(2.73fm)_min:24(2.73fm)_ama_jk')
+    ana_48_physical_pion.save_f2_jk_mean_err(row=24, path=path_save_f2 + '/48I_physical_pion_xxp:24(2.73fm)_min:24(2.73fm)_ama_jk.txt')
+    # 48 interp
+    ana_48_mean, ana_48_err = ana_48_physical_pion.f2_jk_mean[24], ana_48_physical_pion.f2_jk_err[24]
+    ana_48_x = np.arange(len(ana_48_mean)) * ana_48_physical_pion.a
+    ana_48_mean = np.interp(x_linspace, ana_48_x, ana_48_mean)
+    ana_48_err = np.interp(x_linspace, ana_48_x, ana_48_err)
+    print('48')
+    print(ana_48_mean[0:101:5])
+    print(ana_48_err[0:101:5])
+    exit(0)
+
+    # discretization correction
+    ana_24_mean, ana_24_err = ana_24_physical_pion.f2_jk_mean[12], ana_24_physical_pion.f2_jk_err[12]
+    ana_24_x = np.arange(len(ana_24_mean)) * ana_24_physical_pion.a
+    ana_32_fine_mean, ana_32_fine_err = ana_32_fine_physical_pion.f2_jk_mean[16], ana_32_fine_physical_pion.f2_jk_err[16]
+    ana_32_fine_x = np.arange(len(ana_32_fine_mean)) * ana_32_fine_physical_pion.a
+    # print(ana_24_mean)
+
+    ana_24_mean = np.interp(x_linspace, ana_24_x, ana_24_mean)
+    ana_24_err = np.interp(x_linspace, ana_24_x, ana_24_err)
+    ana_32_fine_mean = np.interp(x_linspace, ana_32_fine_x, ana_32_fine_mean)
+    ana_32_fine_err = np.interp(x_linspace, ana_32_fine_x, ana_32_fine_err)
+    extra_mean, extra_err = get_a0_extrapolation_list(
+        [ana_24_physical_pion.a, ana_32_fine_physical_pion.a],
+        [ana_24_mean, ana_32_fine_mean],
+        [ana_24_err, ana_32_fine_err]
+    )
+    # print(extra_mean)
+    plt.errorbar(x_linspace, extra_mean, yerr=extra_err, marker='*', label='discretization correction')
+    save_with_err(path_save_f2 + '/discretization correction.txt', x_linspace, extra_mean, extra_err)
+
+    # finite vol
+    ana_32_mean, ana_32_err = ana_32_physical_pion.f2_jk_mean[16], ana_32_physical_pion.f2_jk_err[16]
+    ana_32_x = np.arange(len(ana_32_mean)) * ana_32_physical_pion.a
+    ana_32_mean = np.interp(x_linspace, ana_32_x, ana_32_mean)
+    ana_32_err = np.interp(x_linspace, ana_32_x, ana_32_err)
+    plt.errorbar(x_linspace, extra_mean + ana_32_mean - ana_24_mean, yerr=extra_err, marker='*', label='discretization + finite vol correction')
+    save_with_err(path_save_f2 + '/discretization + finite vol correction.txt', x_linspace, extra_mean + ana_32_mean - ana_24_mean, extra_err)
+
+    plt.xlabel('longest distance between three points that connect to the muon line (fm)')
+    plt.ylabel('f2 * 10^10 (partial integration from inf)')
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
+    xxp_limit = 16
+    ana_32_fine_physical_pion = Do32DfinePhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine_physical_pion.get_all_config_f2(1024)
+    # ana_32_fine_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine_physical_pion.plt_all_config_f2(rows=range(16, 17), color='r')
+    ana_32_fine_physical_pion.get_f2_jk_dict()
+    ana_32_fine_physical_pion.get_f2_jk_mean_err()
+    ana_32_fine_physical_pion.plt_f2_jk(rows=range(16, 17), color='r', label='32Dfine_physical_pion_xxp:16(2.29fm)_min:16(2.29fm)_ama_jk')
+
+    xxp_limit = 24
+    ana_48_physical_pion = Do48IPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_48_physical_pion.get_all_config_f2(1024)
+    # ana_48.save_all_config_f2(path_save_all_config_f2)
+    # ana_48.load_all_config_f2(path_save_all_config_f2)
+    ana_48_physical_pion.get_f2_jk_dict()
+    ana_48_physical_pion.get_f2_jk_mean_err()
+    ana_48_physical_pion.get_jk_mean_err_save_label()
+    ana_48_physical_pion.plt_f2_jk(rows=range(24, 25), color='y', label='48I_physical_pion_xxp:24(2.73fm)_min:24(2.73fm)_ama_jk')
+
+    plt.legend()
+    plt.show()
+
+    exit(0)
+    xxp_limit = 12
+    ana_24_refine_field = Do24DRefineFieldLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24_refine_field.get_all_config_f2(1024)
+    # ana_24_refine_field.plt_all_config_f2(rows=range(12, 13), color='r')
+    ana_24_refine_field.get_f2_jk_dict()
+    ana_24_refine_field.get_f2_jk_mean_err()
+    ana_24_refine_field.plt_f2_jk(rows=range(12, 13), color='g', label='24D_refine_field_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+
+    xxp_limit = 12
+    ana_24_physical_pion = Do24DPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24_physical_pion.get_all_config_f2(1024)
+    # ana_24_physical_pion.plt_all_config_f2(rows=range(12, 13), color='r')
+    ana_24_physical_pion.get_f2_jk_dict()
+    ana_24_physical_pion.get_f2_jk_mean_err()
+    ana_24_physical_pion.plt_f2_jk(rows=range(12, 13), color='r', label='24D_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+    plt.show()
+    exit(0)
+
+    xxp_limit = 12
+    ana_24_physical_pion = Do24DPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24_physical_pion.get_all_config_f2(1024)
+    # ana_24_physical_pion.plt_all_config_f2(rows=range(12, 13), color='r')
+    ana_24_physical_pion.get_f2_jk_dict()
+    ana_24_physical_pion.get_f2_jk_mean_err()
+    ana_24_physical_pion.plt_f2_jk(rows=range(12, 13), color='g', label='24D_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+
+    xxp_limit = 16
+    ana_32_fine_physical_pion = Do32DfinePhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine_physical_pion.get_all_config_f2(1024)
+    # ana_32_fine_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine_physical_pion.plt_all_config_f2(rows=range(16, 17), color='r')
+    ana_32_fine_physical_pion.get_f2_jk_dict()
+    ana_32_fine_physical_pion.get_f2_jk_mean_err()
+    ana_32_fine_physical_pion.plt_f2_jk(rows=range(16, 17), color='r', label='32Dfine_physical_pion_xxp:16(2.29fm)_min:16(2.29fm)_ama_jk')
+
+    xxp_limit = 24
+    ana_48_physical_pion = Do48IPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_48_physical_pion.get_all_config_f2(1024)
+    # ana_48.save_all_config_f2(path_save_all_config_f2)
+    # ana_48.load_all_config_f2(path_save_all_config_f2)
+    ana_48_physical_pion.get_f2_jk_dict()
+    ana_48_physical_pion.get_f2_jk_mean_err()
+    ana_48_physical_pion.get_jk_mean_err_save_label()
+    ana_48_physical_pion.plt_f2_jk(rows=range(24, 25), color='y', label='48I_physical_pion_xxp:24(2.73fm)_min:24(2.73fm)_ama_jk')
+
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
+    xxp_limit = 12
+    ana_24_h_physical_pion = Do24DHeavyPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    # ana_24_h_physical_pion = Do24DHeavyLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24_h_physical_pion.get_all_config_f2(12)
+    ana_24_h_physical_pion.plt_all_config_f2(rows=range(12, 13), color='r')
+    # ana_24_h_physical_pion.get_f2_jk_dict()
+    # ana_24_h_physical_pion.get_f2_jk_mean_err()
+    # ana_24_h_physical_pion.plt_f2_jk(rows=range(12, 13), color='b', label='24D_h_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
+    xxp_limit = 12
+    ana_24_h_physical_pion = Do24DHeavyPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24_h_physical_pion.get_all_config_f2(1024)
+    # ana_24_h_physical_pion.plt_all_config_f2(rows=range(12, 13), color='r')
+    ana_24_h_physical_pion.get_f2_jk_dict()
+    ana_24_h_physical_pion.get_f2_jk_mean_err()
+    ana_24_h_physical_pion.plt_f2_jk(rows=range(12, 13), color='b', label='24D_h_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
+    xxp_limit = 12
+    ana_24_physical_pion = Do24DPhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24_physical_pion.get_all_config_f2(1024)
+    # ana_24_physical_pion.plt_all_config_f2(rows=range(12, 13), color='r')
+    ana_24_physical_pion.get_f2_jk_dict()
+    ana_24_physical_pion.get_f2_jk_mean_err()
+    ana_24_physical_pion.plt_f2_jk(rows=range(12, 13), color='b', label='24D_physical_pion_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
+    xxp_limit = 12
+    ana_24 = Do24DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24.get_all_config_f2(1024)
+    # ana_24.save_all_config_f2(path_save_all_config_f2)
+    # ana_24.load_all_config_f2(path_save_all_config_f2)
+    ana_24.get_f2_jk_dict()
+    ana_24.get_f2_jk_mean_err()
+    ana_24.plt_f2_jk(rows=range(12, 13), color='y', label='24D_xxp:12(2.33fm)_min:12(2.33fm)_ama_jk')
+
+    xxp_limit = 16
+    ana_32_fine_physical_pion = Do32DfinePhysicalPionLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine_physical_pion.get_all_config_f2(1024)
+    # ana_32_fine_physical_pion.save_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine_physical_pion.load_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine_physical_pion.plt_all_config_f2(rows=range(16, 17), color='r')
+    ana_32_fine_physical_pion.get_f2_jk_dict()
+    ana_32_fine_physical_pion.get_f2_jk_mean_err()
+    ana_32_fine_physical_pion.plt_f2_jk(rows=range(16, 17), color='r', label='32Dfine_physical_pion_xxp:16(2.29fm)_min:16(2.29fm)_ama_jk')
+
+    xxp_limit = 16
+    ana_32_fine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32_fine.get_all_config_f2(1024)
+    # ana_32_fine.save_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine.load_all_config_f2(path_save_all_config_f2)
+    # ana_32_fine.plt_all_config_f2(rows=range(16, 17), color='r')
+    ana_32_fine.get_f2_jk_dict()
+    ana_32_fine.get_f2_jk_mean_err()
+    ana_32_fine.plt_f2_jk(rows=range(16, 17), color='g', label='32Dfine_xxp:16(2.29fm)_min:16(2.29fm)_ama_jk')
+
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
+    xxp_limit = 12
+    ana_32d = Do32DLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_32d.get_all_config_f2(1024)
+    ana_32d.get_f2_mean_err()
+    # ana_32d.save_f2_mean_err(path_save_f2)
+    ana_32d.plt_f2(rows=range(12, 13), color='g', label='32D_xxp:12(2.33fm)_min:12(2.33fm)_ama')
+
+    xxp_limit = 12
+    ana_24d_h = Do24DHeavyLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_24d_h.get_all_config_f2(1024)
+    ana_24d_h.get_f2_mean_err()
+    # ana_24d_h.save_f2_mean_err(path_save_f2)
+    ana_24d_h.plt_f2(rows=range(12, 13), color='b', label='24Dheavy_xxp:12(2.33fm)_min:12(2.33fm)_ama')
+
+    xxp_limit = 24
+    ana_48 = Do48ILatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
+    ana_48.get_all_config_f2(100)
+    # ana_48.save_all_config_f2(path_save_all_config_f2)
+    # ana_48.load_all_config_f2(path_save_all_config_f2)
+    ana_48.get_f2_jk_dict()
+    ana_48.get_f2_jk_mean_err()
+    ana_48.get_jk_mean_err_save_label()
+    ana_48.plt_f2_jk(rows=range(24, 25), color='y', label='48I_xxp:24(2.73fm)_min:24(2.73fm)_ama_jk')
+
+    plt.legend()
+    plt.show()
+
+    exit(0)
+
 
     xxp_limit = 16
     ana_32_fine = Do32DfineLatticeAnalysis(mod='', ama=True, xxp_limit=xxp_limit)
